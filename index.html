@@ -251,11 +251,11 @@
   <div class="section-title">Network · IP Info</div>
   <div class="ip-banner" id="ip-banner">
     <div class="ip-field"><span class="lbl">Public IP</span><span class="val" id="ip">loading…</span></div>
-    <div class="ip-field"><span class="lbl">ISP / Org</span><span class="val" id="isp">—</span></div>
+    <div class="ip-field"><span class="lbl">Continent</span><span class="val" id="isp">—</span></div>
     <div class="ip-field"><span class="lbl">Country</span><span class="val" id="country">—</span></div>
     <div class="ip-field"><span class="lbl">City / Region</span><span class="val" id="city">—</span></div>
     <div class="ip-field"><span class="lbl">IP Timezone</span><span class="val" id="tz-ip">—</span></div>
-    <div class="ip-field"><span class="lbl">ASN</span><span class="val" id="asn">—</span></div>
+    <div class="ip-field"><span class="lbl">ZIP Code</span><span class="val" id="asn">—</span></div>
   </div>
 
   <!-- Browser signals -->
@@ -477,16 +477,15 @@ function renderUniqueness(signals) {
 /* ─── IP FETCH ─── */
 async function fetchIP() {
   try {
-    // ipapi.co는 무료 플랜 기준 일 1000회 제한.
-    // 실제 서비스라면 백엔드에서 호출하거나 ip-api.com, ipinfo.io 등 사용.
-    const r = await fetch('https://ipapi.co/json/');
+    // freeipapi.com: 무료, HTTPS 지원, 인증 없음, 분당 60회
+    const r = await fetch('https://freeipapi.com/api/json');
     const d = await r.json();
-    set('ip',      d.ip || '—');
-    set('isp',     (d.org || '—').slice(0, 35));
-    set('country', `${d.country_name || '—'} (${d.country_code || '—'})`);
-    set('city',    `${d.city || '—'}, ${d.region || '—'}`);
-    set('tz-ip',   d.timezone || '—');
-    set('asn',     d.asn || '—');
+    set('ip',      d.ipAddress || '—');
+    set('isp',     `${d.continent || '—'} (${d.continentCode || '—'})`);
+    set('country', `${d.countryName || '—'} (${d.countryCode || '—'})`);
+    set('city',    `${d.cityName || '—'}, ${d.regionName || '—'}`);
+    set('tz-ip',   d.timeZone || '—');
+    set('asn',     d.zipCode ? `ZIP ${d.zipCode}` : '—');
     return d;
   } catch(e) {
     set('ip', 'blocked or error');
