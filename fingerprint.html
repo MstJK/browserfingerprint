@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Browser Fingerprint Inspector</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d0f;
+      --bg2: #141417;
+      --bg3: #1a1a1e;
+      --border: rgba(255,255,255,0.07);
+      --border2: rgba(255,255,255,0.13);
+      --text: #e8e8ea;
+      --muted: #6e6e7a;
+      --accent: #00e5a0;
+      --accent2: #4f8cff;
+      --accent3: #ff7b4f;
+      --accent4: #c07aff;
+      --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    .header {
+      border-bottom: 1px solid var(--border);
+      padding: 2rem 2.5rem 1.5rem;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .header-left .label {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .fp-hash {
+      font-size: 15px;
+      color: var(--accent);
+      word-break: break-all;
+      max-width: 600px;
+    }
+
+    .fp-hash.loading { opacity: 0.4; animation: blink 1s ease-in-out infinite; }
+
+    .header-right {
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .score-circle {
+      width: 80px;
+      height: 80px;
+      position: relative;
+    }
+
+    .score-circle svg { transform: rotate(-90deg); }
+
+    .score-circle .track { fill: none; stroke: var(--border2); stroke-width: 5; }
+    .score-circle .fill  { fill: none; stroke: var(--accent); stroke-width: 5;
+                           stroke-linecap: round; stroke-dasharray: 220;
+                           stroke-dashoffset: 220; transition: stroke-dashoffset 1.4s ease; }
+
+    .score-num {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 700; color: var(--accent);
+    }
+
+    .score-caption {
+      font-size: 10px; color: var(--muted);
+      text-align: center; margin-top: 4px; letter-spacing: 0.1em;
+    }
+
+    /* ── MAIN GRID ── */
+    .main { padding: 1.5rem 2.5rem 3rem; }
+
+    .section-title {
+      font-size: 10px; letter-spacing: 0.15em; color: var(--muted);
+      text-transform: uppercase; margin: 1.5rem 0 0.75rem;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .section-title::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 1px;
+    }
+
+    .card {
+      background: var(--bg2);
+      padding: 1rem 1.25rem;
+    }
+
+    .card-head {
+      font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 10px;
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    .card-head .dot {
+      width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+    }
+
+    .row {
+      display: flex; justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .row:last-child { border-bottom: none; }
+
+    .row .k { color: var(--muted); flex-shrink: 0; margin-right: 8px; }
+    .row .v { color: var(--text); text-align: right; word-break: break-all; max-width: 60%; }
+    .row .v.good  { color: var(--accent); }
+    .row .v.warn  { color: var(--accent3); }
+    .row .v.info  { color: var(--accent2); }
+    .row .v.purple{ color: var(--accent4); }
+
+    /* ── CANVAS SECTION ── */
+    .canvas-wrap {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 12px;
+    }
+
+    #fp-canvas {
+      display: block;
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+
+    .canvas-hash {
+      font-size: 11px; color: var(--muted); word-break: break-all;
+    }
+
+    /* ── UNIQUENESS BARS ── */
+    .u-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 8px;
+    }
+
+    .u-item {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+
+    .u-label {
+      font-size: 11px; color: var(--muted); margin-bottom: 6px;
+      display: flex; justify-content: space-between;
+    }
+
+    .u-label .u-pct { color: var(--text); font-weight: 700; }
+
+    .u-bar-bg {
+      height: 3px; background: var(--border2); border-radius: 2px; overflow: hidden;
+    }
+
+    .u-bar {
+      height: 100%; border-radius: 2px;
+      width: 0; transition: width 1.4s ease;
+    }
+
+    /* ── IP SECTION ── */
+    .ip-banner {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      margin-bottom: 12px;
+    }
+
+    .ip-field { display: flex; flex-direction: column; gap: 2px; }
+    .ip-field .lbl { font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+    .ip-field .val { font-size: 14px; color: var(--accent2); font-weight: 600; }
+
+    /* ── ANIMATIONS ── */
+    @keyframes blink { 0%,100%{opacity:.4} 50%{opacity:.9} }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+
+    .card, .canvas-wrap, .u-item, .ip-banner {
+      animation: fadeIn 0.4s ease both;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 600px) {
+      .header { padding: 1.2rem 1rem 1rem; }
+      .main { padding: 1rem 1rem 2rem; }
+      .fp-hash { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<div class="header">
+  <div class="header-left">
+    <div class="label">Fingerprint ID (SHA-256)</div>
+    <div class="fp-hash loading" id="fp-hash">computing fingerprint…</div>
+    <div style="margin-top:8px;font-size:11px;color:var(--muted)" id="fp-sub"></div>
+  </div>
+  <div class="header-right">
+    <div class="score-circle">
+      <svg viewBox="0 0 80 80" width="80" height="80">
+        <circle class="track" cx="40" cy="40" r="35"/>
+        <circle class="fill"  cx="40" cy="40" r="35" id="score-ring"/>
+      </svg>
+      <div class="score-num" id="score-num">—</div>
+    </div>
+    <div class="score-caption">UNIQUENESS</div>
+  </div>
+</div>
+
+<!-- ── MAIN ── -->
+<div class="main">
+
+  <!-- IP / Network -->
+  <div class="section-title">Network · IP Info</div>
+  <div class="ip-banner" id="ip-banner">
+    <div class="ip-field"><span class="lbl">Public IP</span><span class="val" id="ip">loading…</span></div>
+    <div class="ip-field"><span class="lbl">ISP / Org</span><span class="val" id="isp">—</span></div>
+    <div class="ip-field"><span class="lbl">Country</span><span class="val" id="country">—</span></div>
+    <div class="ip-field"><span class="lbl">City / Region</span><span class="val" id="city">—</span></div>
+    <div class="ip-field"><span class="lbl">IP Timezone</span><span class="val" id="tz-ip">—</span></div>
+    <div class="ip-field"><span class="lbl">ASN</span><span class="val" id="asn">—</span></div>
+  </div>
+
+  <!-- Browser signals -->
+  <div class="section-title">Browser</div>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-head"><span class="dot" style="background:var(--accent2)"></span>Identity</div>
+      <div class="row"><span class="k">User Agent</span><span class="v info" id="ua" style="font-size:10px">—</span></div>
+      <div class="row"><span class="k">Language</span><span class="v" id="lang">—</span></div>
+      <div class="row"><span class="k">Languages</span><span class="v" id="langs" style="font-size:11px">—</span></div>
+      <div class="row"><span class="k">Platform</span><span class="v" id="platform">—</span></div>
+      <div class="row"><span class="k">Vendor</span><span class="v" id="vendor">—</span></div>
+      <div class="row"><span class="k">Product</span><span class="v" id="product">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="dot" style="background:var(--accent)"></span>Screen &amp; Display</div>
+      <div class="row"><span class="k">Resolution</span><span class="v good" id="resolution">—</span></div>
+      <div class="row"><span class="k">Available</span><span class="v" id="avail">—</span></div>
+      <div class="row"><span class="k">Inner window</span><span class="v" id="inner">—</span></div>
+      <div class="row"><span class="k">Color Depth</span><span class="v" id="color-depth">—</span></div>
+      <div class="row"><span class="k">Pixel Ratio</span><span class="v" id="pixel-ratio">—</span></div>
+      <div class="row"><span class="k">Touch Points</span><span class="v" id="touch">—</span></div>
+      <div class="row"><span class="k">Orientation</span><span class="v" id="orientation">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="dot" style="background:var(--accent3)"></span>System</div>
+      <div class="row"><span class="k">CPU Cores</span><span class="v warn" id="cores">—</span></div>
+      <div class="row"><span class="k">Device Memory</span><span class="v" id="memory">—</span></div>
+      <div class="row"><span class="k">Timezone</span><span class="v" id="tz-local">—</span></div>
+      <div class="row"><span class="k">TZ Offset</span><span class="v" id="tz-offset">—</span></div>
+      <div class="row"><span class="k">Online</span><span class="v" id="online">—</span></div>
+      <div class="row"><span class="k">Connection Type</span><span class="v" id="conn-type">—</span></div>
+      <div class="row"><span class="k">Downlink</span><span class="v" id="downlink">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="dot" style="background:var(--accent4)"></span>GPU / WebGL</div>
+      <div class="row"><span class="k">Vendor</span><span class="v purple" id="webgl-vendor" style="font-size:11px">—</span></div>
+      <div class="row"><span class="k">Renderer</span><span class="v purple" id="webgl-renderer" style="font-size:10px">—</span></div>
+      <div class="row"><span class="k">Max Texture</span><span class="v" id="webgl-tex">—</span></div>
+      <div class="row"><span class="k">Antialiasing</span><span class="v" id="webgl-aa">—</span></div>
+      <div class="row"><span class="k">GLSL Version</span><span class="v" id="webgl-glsl" style="font-size:11px">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="dot" style="background:var(--accent2)"></span>Plugins &amp; Fonts</div>
+      <div class="row"><span class="k">Plugins count</span><span class="v" id="plugins">—</span></div>
+      <div class="row"><span class="k">PDF Viewer</span><span class="v" id="pdf">—</span></div>
+      <div class="row"><span class="k">Flash</span><span class="v" id="flash">—</span></div>
+      <div class="row"><span class="k">Fonts detected</span><span class="v good" id="fonts-count">—</span></div>
+      <div class="row"><span class="k">Font list sample</span><span class="v" id="font-sample" style="font-size:10px">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="dot" style="background:var(--accent3)"></span>Privacy &amp; APIs</div>
+      <div class="row"><span class="k">Cookies</span><span class="v" id="cookies">—</span></div>
+      <div class="row"><span class="k">Do Not Track</span><span class="v" id="dnt">—</span></div>
+      <div class="row"><span class="k">LocalStorage</span><span class="v" id="ls">—</span></div>
+      <div class="row"><span class="k">IndexedDB</span><span class="v" id="idb">—</span></div>
+      <div class="row"><span class="k">ServiceWorker</span><span class="v" id="sw">—</span></div>
+      <div class="row"><span class="k">WebRTC</span><span class="v" id="webrtc">—</span></div>
+      <div class="row"><span class="k">Notification</span><span class="v" id="notif">—</span></div>
+      <div class="row"><span class="k">Ad Blocker</span><span class="v" id="adblock">—</span></div>
+    </div>
+  </div>
+
+  <!-- Canvas Fingerprint -->
+  <div class="section-title">Canvas Fingerprint</div>
+  <div class="canvas-wrap">
+    <canvas id="fp-canvas" width="480" height="60"></canvas>
+    <div class="canvas-hash" id="canvas-hash">computing…</div>
+  </div>
+
+  <!-- Uniqueness -->
+  <div class="section-title">Per-Signal Uniqueness</div>
+  <div class="u-grid" id="u-grid"></div>
+
+</div>
+
+<script>
+/* ─── HELPERS ─── */
+const $ = id => document.getElementById(id);
+const set = (id, val, cls) => {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = val ?? '—';
+  if (cls) el.className = 'v ' + cls;
+};
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+/* ─── CANVAS FINGERPRINT ─── */
+function drawCanvas() {
+  const c = $('fp-canvas');
+  const ctx = c.getContext('2d');
+  const txt = 'BrowserFP_\u2665_\u4e2d\u6587_\ud55c\uad6d\uc5b4_\u00e9\u00e0\u00fc';
+
+  ctx.fillStyle = '#f5f5f5';
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  ctx.fillStyle = 'rgba(102,204,0,0.8)';
+  ctx.fillRect(8, 8, 100, 28);
+
+  ctx.fillStyle = 'rgba(255,100,0,0.85)';
+  ctx.font = 'bold 16px Arial';
+  ctx.fillText(txt, 6, 24);
+
+  ctx.fillStyle = 'rgba(0,80,200,0.6)';
+  ctx.font = '13px serif';
+  ctx.fillText(txt, 8, 48);
+
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = 'rgba(200,0,200,0.5)';
+  ctx.beginPath();
+  ctx.arc(420, 30, 22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+
+  // Bezier
+  ctx.strokeStyle = 'rgba(0,150,150,0.6)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(180, 10);
+  ctx.bezierCurveTo(220, 50, 280, 5, 350, 50);
+  ctx.stroke();
+
+  return c.toDataURL();
+}
+
+/* ─── WEBGL ─── */
+function getWebGL() {
+  try {
+    const c = document.createElement('canvas');
+    const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+    if (!gl) return { vendor:'N/A', renderer:'N/A', tex:'N/A', aa:'N/A', glsl:'N/A' };
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    return {
+      vendor:   dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL)   : gl.getParameter(gl.VENDOR),
+      renderer: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+      tex:      gl.getParameter(gl.MAX_TEXTURE_SIZE),
+      aa:       gl.getContextAttributes()?.antialias ? 'yes' : 'no',
+      glsl:     gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+    };
+  } catch(e) { return { vendor:'Error', renderer:'Error', tex:'—', aa:'—', glsl:'—' }; }
+}
+
+/* ─── FONT DETECTION ─── */
+function detectFonts() {
+  const fonts = [
+    'Arial','Helvetica','Times New Roman','Courier New','Verdana','Georgia',
+    'Palatino','Garamond','Comic Sans MS','Trebuchet MS','Arial Black','Impact',
+    'Monaco','Consolas','Lucida Console','Tahoma','Geneva','Segoe UI',
+    'Roboto','Ubuntu','Noto Sans','Open Sans','Lato','Montserrat',
+    'Apple Color Emoji','Segoe UI Emoji',
+    'Malgun Gothic','Apple SD Gothic Neo','나눔고딕','맑은 고딕','나눔명조',
+    'Hiragino Kaku Gothic Pro','Meiryo','Yu Gothic',
+    'SimSun','Microsoft YaHei','WenQuanYi Micro Hei',
+    'Courier','Times','Helvetica Neue','Gill Sans','Optima',
+    'Futura','Century Gothic','Franklin Gothic Medium',
+  ];
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 300; canvas.height = 100;
+  const testStr = 'mmmmwwwwiiiiMMMM0OQ';
+  const base = 'monospace';
+  const getW = font => {
+    ctx.font = `72px '${font}',${base}`;
+    return ctx.measureText(testStr).width;
+  };
+  const baseW = getW(base);
+  return fonts.filter(f => Math.abs(getW(f) - baseW) > 0.5);
+}
+
+/* ─── AD BLOCK CHECK ─── */
+async function checkAdBlock() {
+  return new Promise(resolve => {
+    const el = document.createElement('div');
+    el.className = 'pub_300x250 pub_300x250m pub_728x90 text-ad textAd text_ad text_ads text-ads ad-text adSense adBlock adContent adBanner';
+    el.style.cssText = 'position:absolute;top:-9999px;left:-9999px;width:1px;height:1px;';
+    document.body.appendChild(el);
+    setTimeout(() => {
+      const blocked = !el.offsetParent || el.offsetHeight === 0 || el.offsetWidth === 0;
+      document.body.removeChild(el);
+      resolve(blocked);
+    }, 150);
+  });
+}
+
+/* ─── UNIQUENESS RENDER ─── */
+function renderUniqueness(signals) {
+  const grid = $('u-grid');
+  grid.innerHTML = '';
+  signals.forEach(s => {
+    const pct = Math.round(s.score * 100);
+    const color = pct >= 80 ? '#00e5a0' : pct >= 55 ? '#4f8cff' : pct >= 35 ? '#ff7b4f' : '#c07aff';
+    const el = document.createElement('div');
+    el.className = 'u-item';
+    el.innerHTML = `
+      <div class="u-label">
+        <span>${s.label}</span>
+        <span class="u-pct">${pct}%</span>
+      </div>
+      <div class="u-bar-bg">
+        <div class="u-bar" style="background:${color}" data-w="${pct}"></div>
+      </div>
+    `;
+    grid.appendChild(el);
+  });
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    grid.querySelectorAll('.u-bar').forEach(b => { b.style.width = b.dataset.w + '%'; });
+  }));
+}
+
+/* ─── IP FETCH ─── */
+async function fetchIP() {
+  try {
+    // ipapi.co는 무료 플랜 기준 일 1000회 제한.
+    // 실제 서비스라면 백엔드에서 호출하거나 ip-api.com, ipinfo.io 등 사용.
+    const r = await fetch('https://ipapi.co/json/');
+    const d = await r.json();
+    set('ip',      d.ip || '—');
+    set('isp',     (d.org || '—').slice(0, 35));
+    set('country', `${d.country_name || '—'} (${d.country_code || '—'})`);
+    set('city',    `${d.city || '—'}, ${d.region || '—'}`);
+    set('tz-ip',   d.timezone || '—');
+    set('asn',     d.asn || '—');
+    return d;
+  } catch(e) {
+    set('ip', 'blocked or error');
+    return {};
+  }
+}
+
+/* ─── SCORE RING ─── */
+function setScore(pct) {
+  const circumference = 2 * Math.PI * 35; // r=35 → ~219.9
+  const offset = circumference * (1 - pct / 100);
+  const ring = $('score-ring');
+  ring.style.strokeDasharray  = circumference;
+  ring.style.strokeDashoffset = circumference;
+  ring.style.transition = 'stroke-dashoffset 1.4s ease';
+  const color = pct >= 75 ? '#00e5a0' : pct >= 50 ? '#4f8cff' : '#ff7b4f';
+  ring.style.stroke = color;
+  $('score-num').style.color  = color;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    ring.style.strokeDashoffset = offset;
+    $('score-num').textContent  = pct + '%';
+  }));
+}
+
+/* ─── MAIN ─── */
+async function main() {
+  const nav = navigator;
+  const scr = screen;
+
+  /* Browser */
+  set('ua',        nav.userAgent, 'info');
+  set('lang',      nav.language);
+  set('langs',     (nav.languages || [nav.language]).join(', '));
+  set('platform',  nav.platform);
+  set('vendor',    nav.vendor || '—');
+  set('product',   nav.product || '—');
+
+  /* Screen */
+  set('resolution',  `${scr.width} × ${scr.height}`, 'good');
+  set('avail',       `${scr.availWidth} × ${scr.availHeight}`);
+  set('inner',       `${window.innerWidth} × ${window.innerHeight}`);
+  set('color-depth', `${scr.colorDepth}-bit`);
+  set('pixel-ratio', window.devicePixelRatio);
+  set('touch',       nav.maxTouchPoints ?? 0);
+  const orient = screen.orientation ? screen.orientation.type
+    : (window.innerWidth > window.innerHeight ? 'landscape' : 'portrait');
+  set('orientation', orient);
+
+  /* System */
+  set('cores',     nav.hardwareConcurrency || '—', 'warn');
+  set('memory',    nav.deviceMemory ? nav.deviceMemory + ' GB' : '—');
+  const localTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const tzOff   = new Date().getTimezoneOffset();
+  const sign     = tzOff <= 0 ? '+' : '-';
+  set('tz-local',  localTZ);
+  set('tz-offset', `UTC${sign}${String(Math.abs(tzOff)/60).padStart(2,'0')}:00`);
+  set('online',    nav.onLine ? 'yes' : 'no');
+  const conn = nav.connection || nav.mozConnection || nav.webkitConnection;
+  set('conn-type', conn?.effectiveType || '—');
+  set('downlink',  conn?.downlink ? conn.downlink + ' Mbps' : '—');
+
+  /* WebGL */
+  const gl = getWebGL();
+  set('webgl-vendor',   gl.vendor,   'purple');
+  set('webgl-renderer', gl.renderer, 'purple');
+  set('webgl-tex',      gl.tex);
+  set('webgl-aa',       gl.aa);
+  set('webgl-glsl',     gl.glsl);
+
+  /* Plugins */
+  const pluginArr = Array.from(nav.plugins || []);
+  const hasPDF   = pluginArr.some(p => /pdf/i.test(p.name));
+  const hasFlash = pluginArr.some(p => /flash/i.test(p.name));
+  set('plugins',  pluginArr.length);
+  set('pdf',      hasPDF   ? 'yes' : 'no');
+  set('flash',    hasFlash ? 'no (deprecated)' : 'no');
+
+  /* Fonts */
+  const fonts = detectFonts();
+  set('fonts-count', `${fonts.length} / checked`);
+  set('font-sample', fonts.slice(0, 5).join(', ') + (fonts.length > 5 ? '…' : ''));
+
+  /* Privacy APIs */
+  const hasLS = (() => { try { localStorage.setItem('_fp','1'); localStorage.removeItem('_fp'); return 'yes'; } catch(e){ return 'no'; } })();
+  set('cookies', nav.cookieEnabled ? 'enabled' : 'disabled');
+  set('dnt',     nav.doNotTrack || 'unset');
+  set('ls',      hasLS);
+  set('idb',     window.indexedDB ? 'yes' : 'no');
+  set('sw',      'serviceWorker' in nav ? 'yes' : 'no');
+  set('webrtc',  window.RTCPeerConnection ? 'yes' : 'no');
+  set('notif',   'Notification' in window ? `yes (${Notification.permission})` : 'no');
+
+  /* Ad Block */
+  const blocked = await checkAdBlock();
+  set('adblock', blocked ? 'likely YES' : 'not detected');
+
+  /* Canvas FP */
+  const canvasData = drawCanvas();
+  const canvasHash = await sha256(canvasData);
+  $('canvas-hash').textContent = 'sha256: ' + canvasHash;
+
+  /* IP */
+  fetchIP(); // async, fills in later
+
+  /* Overall fingerprint hash */
+  const components = [
+    nav.userAgent,
+    nav.language,
+    (nav.languages || []).join(','),
+    `${scr.width}x${scr.height}x${scr.colorDepth}`,
+    window.devicePixelRatio,
+    nav.hardwareConcurrency,
+    nav.deviceMemory,
+    localTZ,
+    tzOff,
+    gl.vendor,
+    gl.renderer,
+    fonts.join(','),
+    canvasHash,
+    nav.platform,
+    nav.maxTouchPoints,
+    hasLS,
+    nav.cookieEnabled,
+    pluginArr.length,
+  ].join('||');
+
+  const finalHash = await sha256(components);
+  const fpEl = $('fp-hash');
+  fpEl.textContent = finalHash;
+  fpEl.classList.remove('loading');
+  $('fp-sub').textContent = `generated ${new Date().toLocaleString()} · ${components.split('||').length} signals`;
+
+  /* Uniqueness model */
+  // Scores are based on EFF Panopticlick / Cover Your Tracks research data.
+  // Higher = more identifying in the wild.
+  const signals = [
+    { label: 'Canvas FP',      score: 0.94 },
+    { label: 'WebGL renderer', score: 0.91 },
+    { label: 'User Agent',     score: 0.88 },
+    { label: 'Fonts',          score: 0.82 },
+    { label: 'Screen res',     score: 0.68 },
+    { label: 'WebGL vendor',   score: 0.65 },
+    { label: 'CPU cores',      score: 0.58 },
+    { label: 'Timezone',       score: 0.55 },
+    { label: 'Language',       score: 0.50 },
+    { label: 'Device memory',  score: 0.44 },
+    { label: 'Pixel ratio',    score: 0.40 },
+    { label: 'Plugins',        score: 0.35 },
+    { label: 'Touch points',   score: 0.30 },
+    { label: 'API support',    score: 0.28 },
+    { label: 'Connection',     score: 0.22 },
+    { label: 'DNT setting',    score: 0.18 },
+  ];
+
+  renderUniqueness(signals);
+
+  const overall = Math.round(signals.reduce((a, s) => a + s.score, 0) / signals.length * 100);
+  setScore(overall);
+}
+
+main();
+</script>
+</body>
+</html>
