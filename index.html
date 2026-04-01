@@ -8,17 +8,17 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0d0d0f;
-      --bg2: #141417;
-      --bg3: #1a1a1e;
-      --border: rgba(255,255,255,0.07);
-      --border2: rgba(255,255,255,0.13);
-      --text: #e8e8ea;
+      --bg: #f5f5f7;
+      --bg2: #ffffff;
+      --bg3: #eaeaec;
+      --border: rgba(0,0,0,0.09);
+      --border2: rgba(0,0,0,0.15);
+      --text: #1a1a1e;
       --muted: #6e6e7a;
-      --accent: #00e5a0;
-      --accent2: #4f8cff;
-      --accent3: #ff7b4f;
-      --accent4: #c07aff;
+      --accent: #008f62;
+      --accent2: #1a5fd4;
+      --accent3: #c94f1a;
+      --accent4: #7b3fcf;
       --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
     }
 
@@ -455,7 +455,7 @@ function renderUniqueness(signals) {
   grid.innerHTML = '';
   signals.forEach(s => {
     const pct = Math.round(s.score * 100);
-    const color = pct >= 80 ? '#00e5a0' : pct >= 55 ? '#4f8cff' : pct >= 35 ? '#ff7b4f' : '#c07aff';
+    const color = pct >= 80 ? '#008f62' : pct >= 55 ? '#1a5fd4' : pct >= 35 ? '#c94f1a' : '#7b3fcf';
     const el = document.createElement('div');
     el.className = 'u-item';
     el.innerHTML = `
@@ -502,7 +502,7 @@ function setScore(pct) {
   ring.style.strokeDasharray  = circumference;
   ring.style.strokeDashoffset = circumference;
   ring.style.transition = 'stroke-dashoffset 1.4s ease';
-  const color = pct >= 75 ? '#00e5a0' : pct >= 50 ? '#4f8cff' : '#ff7b4f';
+  const color = pct >= 75 ? '#008f62' : pct >= 50 ? '#1a5fd4' : '#c94f1a';
   ring.style.stroke = color;
   $('score-num').style.color  = color;
   requestAnimationFrame(() => requestAnimationFrame(() => {
